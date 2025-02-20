@@ -267,6 +267,12 @@ export default ({ app, mainWindow, newVersion, isStoreBuild }: {
           },
         },
         {
+          label: esc(t('Create byte sized segments')),
+          click() {
+            mainWindow.webContents.send('createFixedByteSizedSegments');
+          },
+        },
+        {
           label: esc(t('Create random segments')),
           click() {
             mainWindow.webContents.send('createRandomSegments');
@@ -448,6 +454,10 @@ export default ({ app, mainWindow, newVersion, isStoreBuild }: {
           label: esc(t('Feature request')),
           click() { electron.shell.openExternal('https://github.com/mifi/lossless-cut/issues'); },
         },
+        ...(!isStoreBuild ? [{
+          label: esc(`${t('Donate')} ❤️`),
+          click() { electron.shell.openExternal('https://mifi.no/thanks'); },
+        }] : []),
         { type: 'separator' },
         {
           label: esc(t('Configuration file')),
