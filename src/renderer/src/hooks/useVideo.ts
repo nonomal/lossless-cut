@@ -1,15 +1,13 @@
-import { ReactEventHandler, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ReactEventHandler, useCallback, useMemo, useRef, useState } from 'react';
 import { ChromiumHTMLVideoElement, PlaybackMode } from '../types';
-import { isDurationValid } from '../segments';
 import { showPlaybackFailedMessage } from '../swal';
 
 export default ({ filePath }: { filePath: string | undefined }) => {
-  const [commandedTime, setCommandedTime] = useState(0);
+  const [commandedTime, setCommandedTimeRaw] = useState(0);
   const [compatPlayerEventId, setCompatPlayerEventId] = useState(0);
   const [playbackRate, setPlaybackRateState] = useState(1);
   const [outputPlaybackRate, setOutputPlaybackRateState] = useState(1);
   const [playerTime, setPlayerTime] = useState<number>();
-  const [duration, setDuration] = useState<number>();
   const playbackModeRef = useRef<PlaybackMode>();
 
   const videoRef = useRef<ChromiumHTMLVideoElement>(null);
@@ -54,6 +52,13 @@ export default ({ filePath }: { filePath: string | undefined }) => {
     }
   }, []);
 
+  const commandedTimeRef = useRef(commandedTime);
+
+  const setCommandedTime = useCallback((t: number) => {
+    commandedTimeRef.current = t;
+    setCommandedTimeRaw(t);
+  }, []);
+
   const seekAbs = useCallback((val: number | undefined) => {
     const video = videoRef.current;
     if (video == null || val == null || Number.isNaN(val)) return;
@@ -64,12 +69,7 @@ export default ({ filePath }: { filePath: string | undefined }) => {
     smoothSeek(outVal);
     setCommandedTime(outVal);
     setCompatPlayerEventId((id) => id + 1); // To make sure that we can seek even to the same commanded time that we are already add (e.g. loop current segment)
-  }, [smoothSeek]);
-
-  const commandedTimeRef = useRef(commandedTime);
-  useEffect(() => {
-    commandedTimeRef.current = commandedTime;
-  }, [commandedTime]);
+  }, [setCommandedTime, smoothSeek]);
 
   // Relevant time is the player's playback position if we're currently playing - if not, it's the user's commanded time.
   const relevantTime = useMemo(() => (playing ? playerTime : commandedTime) || 0, [commandedTime, playerTime, playing]);
@@ -86,7 +86,7 @@ export default ({ filePath }: { filePath: string | undefined }) => {
     if (!val) {
       setCommandedTime(videoRef.current!.currentTime);
     }
-  }, []);
+  }, [setCommandedTime]);
 
   const onStopPlaying = useCallback(() => {
     onPlayingChange(false);
@@ -98,13 +98,6 @@ export default ({ filePath }: { filePath: string | undefined }) => {
   }, []);
 
   const onStartPlaying = useCallback(() => onPlayingChange(true), [onPlayingChange]);
-  const onDurationChange = useCallback<ReactEventHandler<HTMLVideoElement>>((e) => {
-    // Some files report duration infinity first, then proper duration later
-    // Sometimes after seeking to end of file, duration might change
-    const { duration: durationNew } = e.currentTarget;
-    console.log('onDurationChange', durationNew);
-    if (isDurationValid(durationNew)) setDuration(durationNew);
-  }, []);
 
   const pause = useCallback(() => {
     if (!filePath || !playingRef.current) return;
@@ -152,9 +145,6 @@ export default ({ filePath }: { filePath: string | undefined }) => {
     pause,
     relevantTime,
     getRelevantTime,
-    duration,
-    setDuration,
-    onDurationChange,
     onVideoAbort,
     compatPlayerEventId,
     setCompatPlayerEventId,

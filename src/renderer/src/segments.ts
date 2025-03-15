@@ -4,22 +4,32 @@ import minBy from 'lodash/minBy';
 import maxBy from 'lodash/maxBy';
 import invariant from 'tiny-invariant';
 
-import { ApparentSegmentBase, PlaybackMode, SegmentBase, SegmentTags, StateSegment } from './types';
+import { PlaybackMode, SegmentBase, SegmentTags, SegmentToExport, StateSegment } from './types';
 
 
 export const isDurationValid = (duration?: number): duration is number => duration != null && Number.isFinite(duration) && duration > 0;
 
-export const createSegment = (props?: { start?: number | undefined, end?: number | undefined, name?: string | undefined, tags?: unknown | undefined }): Omit<StateSegment, 'segColorIndex'> => ({
-  start: props?.start,
+export const createSegment = (props?: {
+  start?: number | undefined,
+  end?: number | undefined,
+  name?: string | undefined,
+  tags?: unknown | undefined,
+  initial?: true,
+  selected?: boolean,
+}): Omit<StateSegment, 'segColorIndex'> => ({
+  start: props?.start ?? 0,
   end: props?.end,
   name: props?.name || '',
   segId: nanoid(),
+  selected: props?.selected ?? true,
 
   // `tags` is an optional object (key-value). Values must always be string
   // See https://github.com/mifi/lossless-cut/issues/879
   tags: props?.tags != null && typeof props.tags === 'object'
     ? Object.fromEntries(Object.entries(props.tags).map(([key, value]) => [key, String(value)]))
     : undefined,
+
+  ...(props?.initial && { initial: true }),
 });
 
 export const addSegmentColorIndex = (segment: Omit<StateSegment, 'segColorIndex'>, segColorIndex: number): StateSegment => ({
@@ -27,57 +37,29 @@ export const addSegmentColorIndex = (segment: Omit<StateSegment, 'segColorIndex'
   segColorIndex,
 });
 
-// Because segments could have undefined start / end
-// (meaning extend to start of timeline or end duration)
-export function getSegApparentStart(seg: SegmentBase) {
-  const time = seg.start;
-  return time !== undefined ? time : 0;
-}
-
-export function getSegApparentEnd(seg: SegmentBase, duration?: number) {
-  const time = seg.end;
-  if (time !== undefined) return time;
-  if (isDurationValid(duration)) return duration;
-  return 0; // Haven't gotten duration yet - what do to ¯\_(ツ)_/¯
-}
-
-export const getCleanCutSegments = (cs: Pick<StateSegment, 'start' | 'end' | 'name' | 'tags'>[]) => cs.map((seg) => ({
-  start: seg.start,
-  end: seg.end,
-  name: seg.name,
-  tags: seg.tags,
+export const mapSaveableSegments = (segments: StateSegment[]) => segments.map(({
+  start, end, name, tags, selected,
+}) => ({
+  start, end, name, tags, selected,
 }));
-
-export function findSegmentsAtCursor(apparentSegments: ApparentSegmentBase[], currentTime: number) {
-  const indexes: number[] = [];
-  apparentSegments.forEach((segment, index) => {
-    if (segment.start <= currentTime && segment.end >= currentTime) indexes.push(index);
-  });
-  return indexes;
-}
 
 // in the past we had non-string tags
 export const getSegmentTags = (segment: { tags?: SegmentTags | undefined }) => (
   Object.fromEntries(Object.entries(segment.tags || {}).flatMap(([tag, value]) => (value != null ? [[tag, String(value)]] : [])))
 );
 
-export const sortSegments = <T>(segments: T[]) => sortBy(segments, 'start');
+export const sortSegments = <T extends { start: number }>(segments: T[]) => sortBy(segments, 'start');
 
 // https://stackoverflow.com/a/30472982/6519037
-export function partitionIntoOverlappingRanges<T extends SegmentBase | ApparentSegmentBase>(
-  array: T[],
-  getSegmentStart = getSegApparentStart,
-  getSegmentEnd = (seg: T) => {
-    if (seg.end == null) throw new Error('Unknown end of segment');
-    return seg.end;
-  },
-) {
+export function partitionIntoOverlappingRanges<T extends SegmentBase>(array: T[]) {
   const [firstItem] = array;
   if (firstItem == null) throw new Error('No segments');
 
   const ret: T[][] = [
     [firstItem],
   ];
+
+  const getSegmentEnd = (s: T) => s.end ?? s.start; // assume markers have a length of 0;
 
   const getMaxEnd = (array2: T[]) => {
     // note: this also mutates array2
@@ -92,9 +74,8 @@ export function partitionIntoOverlappingRanges<T extends SegmentBase | ApparentS
 
   for (let i = 1, g = 0; i < array.length; i += 1) {
     const item = array[i]!;
-    const start = getSegmentStart(item);
-    const prevStart = getSegmentStart(array[i - 1]!);
-    if (start == null || prevStart == null) throw new Error();
+    const { start } = item;
+    const prevStart = array[i - 1]!.start;
     if (start >= prevStart && start < getMaxEnd(ret[g]!)) {
       ret[g]!.push(item);
     } else {
@@ -103,50 +84,70 @@ export function partitionIntoOverlappingRanges<T extends SegmentBase | ApparentS
     }
   }
 
-  return ret.filter((group) => group.length > 1).map((group) => sortBy(group, (seg) => getSegmentStart(seg)));
+  return ret.filter((group) => group.length > 1).map((group) => sortBy(group, (seg) => seg.start));
 }
 
-export function combineOverlappingSegments(existingSegments, getSegApparentEnd2) {
-  const partitionedSegments = partitionIntoOverlappingRanges(existingSegments, getSegApparentStart, getSegApparentEnd2);
-
-  return existingSegments.map((existingSegment) => {
-    const partOfPartition = partitionedSegments.find((partition) => partition.includes(existingSegment));
-    if (partOfPartition == null) return existingSegment; // this is not an overlapping segment, pass it through
-
-    const index = partOfPartition.indexOf(existingSegment);
-    // The first segment is the one with the lowest "start" value, so we use its start value
-    if (index === 0) {
-      return {
-        ...existingSegment,
-        // but use the segment with the highest "end" value as the end value.
-        end: sortBy(partOfPartition, (segment) => segment.end)[partOfPartition.length - 1]!.end,
-      };
-    }
-    return undefined; // then remove all other segments in this partition group
-  }).filter(Boolean);
-}
-
-export function combineSelectedSegments<T extends SegmentBase>(existingSegments: T[], getSegApparentEnd2, isSegmentSelected) {
-  const selectedSegments = existingSegments.filter((segment) => isSegmentSelected(segment));
-  const firstSegment = minBy(selectedSegments, (seg) => getSegApparentStart(seg));
-  const lastSegment = maxBy(selectedSegments, (seg) => getSegApparentEnd2(seg));
+export function combineSelectedSegments(existingSegments: StateSegment[]) {
+  const selectedSegments = existingSegments.filter((segment) => segment.selected);
+  const firstSegment = minBy(selectedSegments, (seg) => seg.start);
+  const lastSegment = maxBy(selectedSegments, (seg) => seg.end ?? seg.start);
 
   return existingSegments.flatMap((existingSegment) => {
+    invariant(lastSegment != null);
     if (existingSegment === firstSegment) {
       return [{
         ...firstSegment,
         start: firstSegment.start,
-        end: lastSegment!.end,
+        end: lastSegment.end ?? lastSegment.start, // for markers use their start
       }];
     }
 
-    if (isSegmentSelected(existingSegment)) return []; // remove other selected segments
+    if (existingSegment.selected) {
+      return []; // remove other selected segments
+    }
 
+    // pass through non selected segments
     return [existingSegment];
   });
 }
 
-export function hasAnySegmentOverlap(sortedSegments: SegmentBase[]) {
+// Made by ChatGPT
+export function combineOverlappingSegments<T extends SegmentBase>(existingSegments: T[]): T[] {
+  if (existingSegments.length === 0) return [];
+
+  // Sort segments by start time
+  const sortedSegments = [...existingSegments];
+  sortedSegments.sort((a, b) => a.start - b.start);
+
+  let currentSegment = sortedSegments[0]!;
+
+  const combinedSegments: T[] = [];
+
+  for (let i = 1; i < sortedSegments.length; i += 1) {
+    const nextSegment = sortedSegments[i]!;
+
+    const currentSegmentEndOrStart = currentSegment.end ?? currentSegment.start;
+
+    // Check if the current segment overlaps or is adjacent to the next segment
+    if (currentSegmentEndOrStart >= nextSegment.start) {
+      currentSegment = {
+        ...currentSegment,
+        end: Math.max(currentSegmentEndOrStart, nextSegment.end ?? nextSegment.start),
+      };
+    } else {
+      // Push the current segment to the combined list and move to the next segment
+      combinedSegments.push(currentSegment);
+      currentSegment = nextSegment;
+    }
+  }
+
+  // Push the last segment
+  combinedSegments.push(currentSegment);
+
+  return combinedSegments;
+}
+
+export function hasAnySegmentOverlap(sortedSegments: { start: number, end: number }[]) {
   if (sortedSegments.length === 0) return false;
 
   const overlappingGroups = partitionIntoOverlappingRanges(sortedSegments);
@@ -154,16 +155,16 @@ export function hasAnySegmentOverlap(sortedSegments: SegmentBase[]) {
 }
 
 // eslint-disable-next-line space-before-function-paren
-export function invertSegments(sortedCutSegments: (SegmentBase & { segId?: string | undefined })[], includeFirstSegment: boolean, includeLastSegment: boolean, duration?: number) {
+export function invertSegments(sortedCutSegments: ({ start: number, end: number, segId?: string | undefined })[], includeFirstSegment: boolean, includeLastSegment: boolean, duration?: number) {
   if (sortedCutSegments.length === 0) return [];
 
   if (hasAnySegmentOverlap(sortedCutSegments)) return [];
 
-  const ret: typeof sortedCutSegments = [];
+  const ret: { start: number, end?: number | undefined, segId?: string | undefined }[] = [];
 
   if (includeFirstSegment) {
     const firstSeg = sortedCutSegments[0]!;
-    if (firstSeg.start != null && firstSeg.start > 0) {
+    if (firstSeg.start > 0) {
       ret.push({
         start: 0,
         end: firstSeg.start,
@@ -186,7 +187,7 @@ export function invertSegments(sortedCutSegments: (SegmentBase & { segId?: strin
   if (includeLastSegment) {
     const lastSeg = sortedCutSegments.at(-1)!;
     if (duration == null || (lastSeg.end != null && lastSeg.end < duration)) {
-      const inverted: typeof sortedCutSegments[number] = {
+      const inverted: typeof ret[number] = {
         start: lastSeg.end,
         end: duration,
       };
@@ -197,7 +198,7 @@ export function invertSegments(sortedCutSegments: (SegmentBase & { segId?: strin
 
   // Filter out zero length resulting segments
   // https://github.com/mifi/lossless-cut/issues/909
-  return ret.filter(({ start, end }) => end == null || start == null || end > start);
+  return ret.filter(({ start, end }) => end == null || end > start);
 }
 
 // because chapters need to be contiguous, we need to insert gaps in-between
@@ -205,16 +206,20 @@ export function convertSegmentsToChapters(sortedSegments: { start: number, end: 
   if (sortedSegments.length === 0) return [];
   if (hasAnySegmentOverlap(sortedSegments)) throw new Error('Segments cannot overlap');
 
-  const invertedSegments = invertSegments(sortedSegments, true, false).map(({ start, end, ...seg }) => {
-    invariant(start != null && end != null); // to please typescript
-    return { ...seg, start, end };
+  const invertedSegments = invertSegments(sortedSegments, true, false).map(({ end, ...seg }) => {
+    invariant(end != null); // to please typescript
+    return { ...seg, end };
   });
 
   // inverted segments will be "gap" segments. Merge together with normal segments
   return sortSegments([...sortedSegments, ...invertedSegments]);
 }
 
-export function playOnlyCurrentSegment({ playbackMode, currentTime, playingSegment }: { playbackMode: PlaybackMode, currentTime: number, playingSegment: ApparentSegmentBase }) {
+export function getPlaybackMode({ playbackMode, currentTime, playingSegment }: {
+  playbackMode: PlaybackMode,
+  currentTime: number,
+  playingSegment: { start: number, end: number },
+}) {
   switch (playbackMode) {
     case 'loop-segment-start-end': {
       const maxSec = 3; // max time each side (start/end)
@@ -256,12 +261,30 @@ export function playOnlyCurrentSegment({ playbackMode, currentTime, playingSegme
     default:
   }
 
-  return {};
+  return undefined; // no action
 }
 
-export const getNumDigits = (value) => Math.floor(value > 0 ? Math.log10(value) : 0) + 1;
+export const getNumDigits = (value: number) => Math.floor(value > 0 ? Math.log10(value) : 0) + 1;
 
 export function formatSegNum(segIndex: number, numSegments: number, minLength = 0) {
   const numDigits = getNumDigits(numSegments);
   return `${segIndex + 1}`.padStart(Math.max(numDigits, minLength), '0');
 }
+
+export const filterNonMarkers = <T extends { end?: number | undefined }>(segments: T[]) => segments.flatMap(({ end, ...rest }) => (end != null ? [{
+  ...rest,
+  end,
+}] : []));
+
+export function makeDurationSegments(segmentDuration: number, fileDuration: number) {
+  const edl: { start: number, end: number }[] = [];
+  for (let start = 0; start < fileDuration; start += segmentDuration) {
+    const end = start + segmentDuration;
+    edl.push({ start, end: end >= fileDuration ? fileDuration : end });
+  }
+  return edl;
+}
+
+export const isInitialSegment = (segments: StateSegment[]) => segments.length === 0 || (segments.length === 1 && segments[0]!.initial);
+
+export const getGuaranteedSegments = <T extends SegmentToExport>(segments: T[], fileDuration: number | undefined) => (segments.length > 0 ? segments : [{ start: 0, end: fileDuration ?? 0, name: '', originalIndex: 0 }]);

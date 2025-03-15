@@ -63,20 +63,30 @@ describe('parseYouTube', () => {
       { start: 0, end: undefined, name: 'Test 1' },
     ]);
   });
+
+  // possibly https://github.com/mifi/lossless-cut/issues/2344
+  it('Windows crlf', () => {
+    const str = ' 00:00: Test 1\r\n00:01: Test 2';
+    const edl = parseYouTube(str);
+    expect(edl).toEqual([
+      { start: 0, end: 1, name: 'Test 1' },
+      { start: 1, end: undefined, name: 'Test 2' },
+    ]);
+  });
 });
 
 it('formatYouTube', () => {
   expect(formatYouTube([
-    { start: 1, end: 2, name: 'Label 🎉' },
-    { start: 3, end: 5 },
-    { start: 10000, end: 10001, name: '' },
+    { start: 1, name: 'Label 🎉' },
+    { start: 3 },
+    { start: 10000, name: '' },
   ]).split('\n')).toEqual([
     '0:01 Label 🎉',
     '0:03',
     '2:46:40',
   ]);
   expect(formatYouTube([
-    { start: 0, end: 100 },
+    { start: 0 },
   ]).split('\n')).toEqual([
     '0:00',
   ]);
@@ -183,7 +193,7 @@ it('parses xmeml - with multiple tracks', async () => {
 
 // see https://github.com/mifi/lossless-cut/issues/1195
 it('parses fcpxml 1.9', async () => {
-  expect(await parseFcpXml(await readFixture('FCPXML_1_9.fcpxml'))).toMatchSnapshot();
+  expect(parseFcpXml(await readFixture('FCPXML_1_9.fcpxml'))).toMatchSnapshot();
 });
 
 // https://github.com/mifi/lossless-cut/issues/1024

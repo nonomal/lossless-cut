@@ -15,11 +15,13 @@ import { getModifier } from '../hooks/useTimelineScroll';
 import { KeyBinding, KeyboardAction, ModifierKey } from '../../../../types';
 import { StateSegment } from '../types';
 import Sheet from './Sheet';
+import { splitKeyboardKeys } from '../util';
 
 
 type Category = string;
 
 type ActionsMap = Record<KeyboardAction, { name: string, category?: Category, before?: ReactNode }>;
+
 
 const renderKeys = (keys: string[]) => keys.map((key, i) => (
   <Fragment key={key}>
@@ -138,7 +140,10 @@ function WheelModifier({ text, wheelText, modifier }: { text: string, wheelText:
 const KeyboardShortcuts = memo(({
   keyBindings, setKeyBindings, resetKeyBindings, currentCutSeg,
 }: {
-  keyBindings: KeyBinding[], setKeyBindings: Dispatch<SetStateAction<KeyBinding[]>>, resetKeyBindings: () => void, currentCutSeg: StateSegment,
+  keyBindings: KeyBinding[],
+  setKeyBindings: Dispatch<SetStateAction<KeyBinding[]>>,
+  resetKeyBindings: () => void,
+  currentCutSeg: StateSegment | undefined,
 }) => {
   const { t } = useTranslation();
 
@@ -313,6 +318,10 @@ const KeyboardShortcuts = memo(({
         name: t('Add cut segment'),
         category: segmentsAndCutpointsCategory,
       },
+      removeCurrentCutpoint: {
+        name: t('Remove current segment cutpoint'),
+        category: segmentsAndCutpointsCategory,
+      },
       removeCurrentSegment: {
         name: t('Remove current segment'),
         category: segmentsAndCutpointsCategory,
@@ -343,6 +352,10 @@ const KeyboardShortcuts = memo(({
         name: t('Focus segment at cursor'),
         category: segmentsAndCutpointsCategory,
       },
+      selectSegmentsAtCursor: {
+        name: t('Select segments at cursor'),
+        category: segmentsAndCutpointsCategory,
+      },
       duplicateCurrentSegment: {
         name: t('Duplicate current segment'),
         category: segmentsAndCutpointsCategory,
@@ -351,16 +364,32 @@ const KeyboardShortcuts = memo(({
         name: t('Jump to previous segment'),
         category: segmentsAndCutpointsCategory,
       },
+      jumpSeekPrevSegment: {
+        name: t('Jump & seek to previous segment'),
+        category: segmentsAndCutpointsCategory,
+      },
       jumpNextSegment: {
         name: t('Jump to next segment'),
+        category: segmentsAndCutpointsCategory,
+      },
+      jumpSeekNextSegment: {
+        name: t('Jump & seek to next segment'),
         category: segmentsAndCutpointsCategory,
       },
       jumpFirstSegment: {
         name: t('Jump to first segment'),
         category: segmentsAndCutpointsCategory,
       },
+      jumpSeekFirstSegment: {
+        name: t('Jump & seek to first segment'),
+        category: segmentsAndCutpointsCategory,
+      },
       jumpLastSegment: {
         name: t('Jump to last segment'),
+        category: segmentsAndCutpointsCategory,
+      },
+      jumpSeekLastSegment: {
+        name: t('Jump & seek to last segment'),
         category: segmentsAndCutpointsCategory,
       },
       reorderSegsByStartTime: {
@@ -393,6 +422,10 @@ const KeyboardShortcuts = memo(({
       },
       createNumSegments: {
         name: t('Create num segments'),
+        category: segmentsAndCutpointsCategory,
+      },
+      createFixedByteSizedSegments: {
+        name: t('Create byte sized segments'),
         category: segmentsAndCutpointsCategory,
       },
       createRandomSegments: {
@@ -440,6 +473,10 @@ const KeyboardShortcuts = memo(({
       },
       selectAllSegments: {
         name: t('Select all segments'),
+        category: segmentsAndCutpointsCategory,
+      },
+      selectAllMarkers: {
+        name: t('Select all markers'),
         category: segmentsAndCutpointsCategory,
       },
       toggleCurrentSegmentSelected: {
@@ -698,7 +735,7 @@ const KeyboardShortcuts = memo(({
 
   const categoriesWithActions = useMemo(() => Object.entries(groupBy(actionEntries, ([, { category }]) => category)), [actionEntries]);
 
-  const onDeleteBindingClick = useCallback(({ action, keys }) => {
+  const onDeleteBindingClick = useCallback(({ action, keys }: { action: KeyboardAction, keys: string }) => {
     // eslint-disable-next-line no-alert
     if (!window.confirm(t('Are you sure?'))) return;
 
@@ -782,7 +819,7 @@ const KeyboardShortcuts = memo(({
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                     {bindingsForThisAction.map(({ keys }) => (
                       <div key={keys} style={{ display: 'flex', alignItems: 'center' }}>
-                        {renderKeys(keys.split('+'))}
+                        {renderKeys(splitKeyboardKeys(keys))}
 
                         <IconButton title={t('Remove key binding')} appearance="minimal" intent="danger" icon={DeleteIcon} onClick={() => onDeleteBindingClick({ action, keys })} />
                       </div>
@@ -811,7 +848,12 @@ const KeyboardShortcuts = memo(({
 function KeyboardShortcutsDialog({
   isShown, onHide, keyBindings, setKeyBindings, resetKeyBindings, currentCutSeg,
 }: {
-  isShown: boolean, onHide: () => void, keyBindings: KeyBinding[], setKeyBindings: Dispatch<SetStateAction<KeyBinding[]>>, resetKeyBindings: () => void, currentCutSeg: StateSegment,
+  isShown: boolean,
+  onHide: () => void,
+  keyBindings: KeyBinding[],
+  setKeyBindings: Dispatch<SetStateAction<KeyBinding[]>>,
+  resetKeyBindings: () => void,
+  currentCutSeg: StateSegment | undefined,
 }) {
   const { t } = useTranslation();
 

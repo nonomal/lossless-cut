@@ -1,5 +1,7 @@
 # Contributing
 
+## [Translation](translation.md)
+
 ## Development environment setup
 
 This app is built using Electron.
@@ -61,6 +63,8 @@ Windows store version is built as a Desktop Bridge app (with `runFullTrust` capa
 - https://stackoverflow.com/a/52921641/6519037
 
 ## Releasing
+
+Before releasing, consider [Maintainence chores](#maintainence-chores) first.
 
 ### Build new version
 
@@ -145,7 +149,7 @@ Links:
 ### Keep dependencies up to date
 - ffmpeg
 - `electron`, `@electron/remote` and upgrade [electron.vite.config.ts](./electron.vite.config.ts) `target`s.
-- `package.json`
+- `package.json` / `yarn.lock`
 
 ### i18n
 ```bash
