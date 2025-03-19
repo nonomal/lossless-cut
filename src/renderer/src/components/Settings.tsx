@@ -122,7 +122,7 @@ function Settings({
             <td>
               <Select value={language || ''} onChange={onLangChange} style={{ fontSize: '1.2em' }}>
                 <option key="" value="">{t('System language')}</option>
-                {Object.keys(langNames).map((lang) => <option key={lang} value={lang}>{langNames[lang]}</option>)}
+                {Object.keys(langNames).map((lang) => <option key={lang} value={lang}>{langNames[lang as keyof typeof langNames]}</option>)}
               </Select>
             </td>
           </Row>
@@ -329,7 +329,7 @@ function Settings({
               {t('Snapshot capture format')}
             </KeyCell>
             <td>
-              <CaptureFormatButton showIcon />
+              <CaptureFormatButton showIcon style={{ padding: '.5em 1em' }} />
             </td>
           </Row>
 
@@ -357,7 +357,10 @@ function Settings({
 
           {showAdvanced && (
             <Row>
-              <KeyCell>{t('File names of extracted video frames')}</KeyCell>
+              <KeyCell>
+                {t('File names of extracted video frames')}
+                <div style={detailsStyle}>{t('Note that this only applies when extracting multiple frames. When "Frame number" is selected, frame numbers are relative to the start of the segment (starting from 1).')}</div>
+              </KeyCell>
               <td>
                 <Button iconBefore={captureFrameFileNameFormat === 'timestamp' ? TimeIcon : NumericalIcon} onClick={() => setCaptureFrameFileNameFormat((existing) => (existing === 'timestamp' ? 'index' : 'timestamp'))}>
                   {captureFrameFileNameFormat === 'timestamp' ? t('Frame timestamp') : t('Frame number')}
@@ -436,6 +439,15 @@ function Settings({
 
           {showAdvanced && (
             <Row>
+              <KeyCell>{t('Waveform height')}</KeyCell>
+              <td>
+                <Button iconBefore={CogIcon} onClick={() => onTunerRequested('waveformHeight')}>{t('Change value')}</Button>
+              </td>
+            </Row>
+          )}
+
+          {showAdvanced && (
+            <Row>
               <KeyCell>{t('Auto load timecode from file as an offset in the timeline?')}</KeyCell>
               <td>
                 <Switch checked={autoLoadTimecode} onCheckedChange={setAutoLoadTimecode} />
@@ -451,7 +463,6 @@ function Settings({
               </td>
             </Row>
           )}
-
 
           {showAdvanced && (
             <Row>

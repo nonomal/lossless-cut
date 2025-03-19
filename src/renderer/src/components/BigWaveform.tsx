@@ -1,15 +1,15 @@
-import { memo, useEffect, useState, useCallback, useRef, CSSProperties, MouseEventHandler, WheelEventHandler } from 'react';
+import { memo, useEffect, useState, useCallback, useRef, CSSProperties, MouseEventHandler, WheelEventHandler, useMemo } from 'react';
 import { Spinner } from 'evergreen-ui';
 
 import { ffmpegExtractWindow } from '../util/constants';
-import { RenderableWaveform } from '../types';
+import { WaveformSlice } from '../types';
 
 
-function BigWaveform({ waveforms, relevantTime, playing, durationSafe, zoom, seekRel, darkMode }: {
-  waveforms: RenderableWaveform[],
+function BigWaveform({ waveforms, relevantTime, playing, fileDurationNonZero, zoom, seekRel, darkMode }: {
+  waveforms: WaveformSlice[],
   relevantTime: number,
   playing: boolean,
-  durationSafe: number,
+  fileDurationNonZero: number,
   zoom: number,
   seekRel: (a: number) => void,
   darkMode: boolean,
@@ -17,7 +17,7 @@ function BigWaveform({ waveforms, relevantTime, playing, durationSafe, zoom, see
   const windowSize = ffmpegExtractWindow * 2;
   const windowStart = Math.max(0, relevantTime - windowSize);
   const windowEnd = relevantTime + windowSize;
-  const filtered = waveforms.filter((waveform) => waveform.from >= windowStart && waveform.to <= windowEnd);
+  const filtered = useMemo(() => waveforms.filter((waveform) => waveform.from >= windowStart && waveform.to <= windowEnd), [waveforms, windowEnd, windowStart]);
 
   const scaleFactor = zoom;
 
@@ -25,13 +25,13 @@ function BigWaveform({ waveforms, relevantTime, playing, durationSafe, zoom, see
 
   const smoothTime = smoothTimeRaw ?? relevantTime;
 
-  const mouseDownRef = useRef<{ relevantTime: number, x }>();
+  const mouseDownRef = useRef<{ relevantTime: number, x: number }>();
   const containerRef = useRef<HTMLDivElement>(null);
 
   const getRect = useCallback(() => containerRef.current!.getBoundingClientRect(), []);
 
-  const handleMouseDown = useCallback((e) => {
-    const rect = e.target.getBoundingClientRect();
+  const handleMouseDown = useCallback<MouseEventHandler<HTMLDivElement>>((e) => {
+    const rect = (e.target as HTMLDivElement).getBoundingClientRect();
     const x = e.clientX - rect.left;
 
     mouseDownRef.current = { relevantTime, x };
@@ -105,7 +105,7 @@ function BigWaveform({ waveforms, relevantTime, playing, durationSafe, zoom, see
           width: widthPercent,
           left: leftPercent,
           borderLeft: waveform.from === 0 ? '1px solid var(--gray11)' : undefined,
-          borderRight: waveform.to >= durationSafe ? '1px solid var(--gray11)' : undefined,
+          borderRight: waveform.to >= fileDurationNonZero ? '1px solid var(--gray11)' : undefined,
           filter: darkMode ? undefined : 'invert(1)',
         };
 

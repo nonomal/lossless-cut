@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo, memo, CSSProperties, RefObject } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo, memo, CSSProperties, RefObject, ReactEventHandler, FocusEventHandler } from 'react';
 import { Spinner } from 'evergreen-ui';
 import { useDebounce } from 'use-debounce';
 
@@ -9,11 +9,11 @@ import { FFprobeStream } from '../../../ffprobe';
 const { compatPlayer: { createMediaSourceStream, readOneJpegFrame } } = window.require('@electron/remote').require('./index.js');
 
 
-async function startPlayback({ path, video, videoStreamIndex, audioStreamIndex, seekTo, signal, playSafe, onCanPlay, getTargetTime, size, fps }: {
+async function startPlayback({ path, video, videoStreamIndex, audioStreamIndexes, seekTo, signal, playSafe, onCanPlay, getTargetTime, size, fps }: {
   path: string,
   video: ChromiumHTMLVideoElement,
   videoStreamIndex?: number | undefined,
-  audioStreamIndex?: number | undefined,
+  audioStreamIndexes: number[],
   seekTo: number,
   signal: AbortSignal,
   playSafe: () => void,
@@ -25,7 +25,7 @@ async function startPlayback({ path, video, videoStreamIndex, audioStreamIndex, 
   let canPlay = false;
   let bufferEndTime: number | undefined;
   let bufferStartTime = 0;
-  let stream;
+  let stream: ReturnType<typeof createMediaSourceStream> | undefined;
   let done = false;
   let interval: NodeJS.Timeout | undefined;
   let objectUrl: string | undefined;
@@ -48,7 +48,7 @@ async function startPlayback({ path, video, videoStreamIndex, audioStreamIndex, 
 
   const mediaSource = new MediaSource();
 
-  let streamTimestamp;
+  let streamTimestamp: number | undefined;
   let lastRemoveTimestamp = 0;
 
   function setStandardPlaybackRate() {
@@ -61,7 +61,7 @@ async function startPlayback({ path, video, videoStreamIndex, audioStreamIndex, 
 
   const codecs: string[] = [];
   if (videoStreamIndex != null) codecs.push('avc1.42C01F');
-  if (audioStreamIndex != null) codecs.push('mp4a.40.2');
+  if (audioStreamIndexes.length > 0) codecs.push('mp4a.40.2');
   const codecTag = codecs.join(', ');
 
   const mimeCodec = `video/mp4; codecs="${codecTag}"`;
@@ -111,7 +111,7 @@ async function startPlayback({ path, video, videoStreamIndex, audioStreamIndex, 
 
   const processChunk = async () => {
     try {
-      const chunk = await stream.readChunk();
+      const chunk = await stream!.readChunk();
       if (chunk == null) {
         console.log('End of stream');
         return;
@@ -183,7 +183,7 @@ async function startPlayback({ path, video, videoStreamIndex, audioStreamIndex, 
     processChunk();
   });
 
-  stream = createMediaSourceStream({ path, videoStreamIndex, audioStreamIndex, seekTo, size, fps });
+  stream = createMediaSourceStream({ path, videoStreamIndex, audioStreamIndexes, seekTo, size, fps });
 
   interval = setInterval(() => {
     if (mediaSource.readyState !== 'open') {
@@ -257,14 +257,24 @@ async function createPauseImage({ path, seekTo, videoStreamIndex, canvas, signal
   drawJpegFrame(canvas, jpegImage);
 }
 
-function MediaSourcePlayer({ rotate, filePath, playerTime, videoStream, audioStream, commandedTime, playing, eventId, masterVideoRef, mediaSourceQuality, playbackVolume }: {
-  rotate: number | undefined, filePath: string, playerTime: number, videoStream: FFprobeStream | undefined, audioStream: FFprobeStream | undefined, commandedTime: number, playing: boolean, eventId: number, masterVideoRef: RefObject<HTMLVideoElement>, mediaSourceQuality: number, playbackVolume: number,
+function MediaSourcePlayer({ rotate, filePath, playerTime, videoStream, audioStreams, commandedTime, playing, eventId, masterVideoRef, mediaSourceQuality, playbackVolume }: {
+  rotate: number | undefined,
+  filePath: string,
+  playerTime: number,
+  videoStream: FFprobeStream | undefined,
+  audioStreams: FFprobeStream[],
+  commandedTime: number,
+  playing: boolean,
+  eventId: number,
+  masterVideoRef: RefObject<HTMLVideoElement>,
+  mediaSourceQuality: number,
+  playbackVolume: number,
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(true);
 
-  const onVideoError = useCallback((error) => {
+  const onVideoError = useCallback<ReactEventHandler<HTMLVideoElement>>((error) => {
     console.error('video error', error);
   }, []);
 
@@ -272,6 +282,8 @@ function MediaSourcePlayer({ rotate, filePath, playerTime, videoStream, audioStr
     ? { startTime: commandedTime, playing, eventId }
     : { startTime: playerTime, playing, eventId }
   ), [commandedTime, eventId, playerTime, playing]);
+
+  const audioStreamIndexes = useMemo(() => audioStreams.map((s) => s.index), [audioStreams]);
 
   const [debouncedState] = useDebounce(state, 300, {
     equalityFn: (a, b) => a.startTime === b.startTime && a.playing === b.playing && a.eventId === b.eventId,
@@ -328,7 +340,7 @@ function MediaSourcePlayer({ rotate, filePath, playerTime, videoStream, audioStr
           if (mediaSourceQuality === 0) fps = 30;
           else if (mediaSourceQuality === 1) fps = 15;
 
-          await startPlayback({ path: filePath, video, videoStreamIndex: videoStream?.index, audioStreamIndex: audioStream?.index, seekTo: debouncedState.startTime, signal: abortController.signal, playSafe, onCanPlay, getTargetTime, size, fps });
+          await startPlayback({ path: filePath, video, videoStreamIndex: videoStream?.index, audioStreamIndexes, seekTo: debouncedState.startTime, signal: abortController.signal, playSafe, onCanPlay, getTargetTime, size, fps });
         } else { // paused
           if (videoStream != null) {
             await createPauseImage({ path: filePath, seekTo: debouncedState.startTime, videoStreamIndex: videoStream.index, canvas: canvasRef.current, signal: abortController.signal });
@@ -342,13 +354,13 @@ function MediaSourcePlayer({ rotate, filePath, playerTime, videoStream, audioStr
 
     return () => abortController.abort();
     // Important that we also have eventId in the deps, so that we can restart the preview when the eventId changes
-  }, [debouncedState.startTime, debouncedState.eventId, filePath, masterVideoRef, playSafe, debouncedState.playing, videoStream, mediaSourceQuality, audioStream?.index]);
+  }, [debouncedState.startTime, debouncedState.eventId, filePath, masterVideoRef, playSafe, debouncedState.playing, videoStream, mediaSourceQuality, audioStreamIndexes]);
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.volume = playbackVolume;
   }, [playbackVolume]);
 
-  const onFocus = useCallback((e) => {
+  const onFocus = useCallback<FocusEventHandler<HTMLVideoElement | HTMLCanvasElement>>((e) => {
     // prevent video element from stealing focus in fullscreen mode https://github.com/mifi/lossless-cut/issues/543#issuecomment-1868167775
     e.target.blur();
   }, []);

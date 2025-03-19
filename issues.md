@@ -2,7 +2,7 @@
 
 Please read this first:
 
-- **Q:** Can LosslessCut **crop, resize, stretch, mirror/flip, overlay text/images, watermark, blur, redact, reduce quality/re-encode, create GIF, slideshow, burn subtitles, color grading, fade/transition between video clips, fade/combine/mix/merge audio tracks or change audio volume**?
+- **Q:** Can LosslessCut **crop, resize, stretch, mirror/flip, overlay text/images, watermark, blur, redact, reduce quality/re-encode, create GIF, slideshow, burn subtitles, color grading, fade/transition between video clips, fade/combine/mix/merge audio tracks, mute audio channels or change audio volume**?
   - **A:** No, these are all lossy operations (meaning you *have* to re-encode the file), but in the future I may start to implement such features. [See #372](https://github.com/mifi/lossless-cut/issues/372). Related: [#643](https://github.com/mifi/lossless-cut/issues/643).
 - **Q:** Is there a keyboard shortcut to do X?
   - **A:** First check the Keyboard shortcuts dialog. If you cannot find your shortcut there, [see this issue.](https://github.com/mifi/lossless-cut/issues/254)
@@ -27,16 +27,7 @@ LosslessCut version in the App Stores is often a few versions behind the latest 
 
 # Primer: Video & audio formats vs. codecs
 
-Here's a little primer about video and audio formats for those not familiar. A common mistake when dealing with audio and video files, is to confuse *formats*, *codecs*, and *file names*. In short: A file's media format is a *container* that holds one or more *codecs* (audio/video/subtitle) inside of it. For example `.mov` is a *container format*, and `H265`/`HEVC` is a *codec*. Some formats support only a few codecs inside of them, while others support more codecs. The most common formats are MP4/MOV (often `.mp4`,`.mov`,`.m4a`) and Matroska (often `.mkv`,`.mka`). Example: If you have a file named `My video.mp4`, this file most likely (but not necessarily) has the *format* `MP4`. Note that the extension of a file (in this case `.mp4`) doesn't really mean anything, and the file could in reality for example have the `MOV` format, or the extension could be `.txt`. Inside `My video.mp4` there are multiple tracks/streams, each with their own *codec*. In this example, let's say that it contains one `H264` track and one `AAC` track. In LosslessCut you can view and add/delete/modify these tracks.
-
-**Remuxing**: If you change the output format in LosslessCut and export a file, you are *remuxing* the tracks/codecs into a different container format. When you do this, the operation is in theory lossless, meaning you will not lose any codec data and the different tracks will remain exactly the same, even though the format is now different (but some format metadata might get lost due to incompatibilities between container formats). There are limitations: Some popular codecs like VP8 or VP9 are not supported in popular formats like MP4, and some popular formats like Matroska (`.mkv`) are not natively supported in popular video players like iPhone or QuickTime.
-
-If you want to reduce the size of a file using LosslessCut you have to "get rid of" something, either:
-- Reduce the duration of the file (cut off start/end)
-- Remove one or more tracks/streams (e.g. remove an audio track that you don't need)
-Other than that you it's not possible convert a file losslessly to reduce its size, unless you re-encode and lose quality. For that, I recommend using a different tool like e.g. [HandBrake](https://handbrake.fr/).
-
-Here is a great introduction to audio/video: [howvideo.works](https://howvideo.works/).
+Learn the [difference between a codec and a format](docs.md#primer-video--audio-formats-vs-codecs).
 
 # Common / known issues & troubleshooting
 
@@ -115,10 +106,10 @@ If you have an issue with the Snap or Flatpak version of LosslessCut, try instea
   - Try to run with `--disable-gpu` - See [781](https://github.com/mifi/lossless-cut/issues/781).
 - How to uninstall LosslessCut?
   - There is no installer. Just delete the folder. [More info](./installation.md).
-- Preview of H265/HEVC files is completely black, corrupted or just won't play back?
-  - This probably means that Chromium (which LosslessCut uses for playback) doesn't support your particular file (maybe it's 10-bit). [#2228](https://github.com/mifi/lossless-cut/discussions/2228), [#1767](https://github.com/mifi/lossless-cut/discussions/1767)
-  - Go to settings and disable "Hardware HEVC decoding".
-  - Use FFmpeg-assisted software decoding playback by going to *File* -> *Convert to supported format*
+- Preview is completely black/blank, corrupted or just won't play back?
+  - This probably means that Chromium (which LosslessCut uses for playback) doesn't support your particular file (maybe it's 10-bit). [#2228](https://github.com/mifi/lossless-cut/discussions/2228), [#1767](https://github.com/mifi/lossless-cut/discussions/1767), [#2307](https://github.com/mifi/lossless-cut/issues/2307).
+  1. If H265/HEVC file, go to settings and disable "Hardware HEVC decoding".
+  2. Use FFmpeg-assisted software decoding playback by going to *File* -> *Convert to supported format*
 - Video preview playback slow, stuttering, flickering inside LosslessCut (NVIDIA)
   - See [#922](https://github.com/mifi/lossless-cut/issues/922) [#1904](https://github.com/mifi/lossless-cut/issues/1904) [#1915](https://github.com/mifi/lossless-cut/issues/1915) [#922](https://github.com/mifi/lossless-cut/issues/922) [#2083](https://github.com/mifi/lossless-cut/issues/2083)
 - Why no `.exe`/`.zip`/`.appx` downloads?
@@ -130,9 +121,13 @@ If you have an issue with the Snap or Flatpak version of LosslessCut, try instea
 
 - Undo/redo segments doesn't work through the top menu. This is a [known issue](https://github.com/mifi/lossless-cut/issues/610) that I don't know how to fix. Please use the keyboard shortcuts instead (<kbd>CTRL</kbd>/<kbd>CMD</kbd>+<kbd>Z</kbd> and <kbd>CTRL</kbd>+<kbd>Y</kbd> / <kbd>CMD</kbd>+<kbd>SHIFT</kbd>+<kbd>Z</kbd>).
 
+## File not supported
+
+If you're getting a message saying that the file must be converted to a supported format, this means that LosslessCut's built-in player isn't able to play back that particular file. As a work-around LosslessCut has an FFmpeg-assisted software decoding playback which can be activated from the menu: *File -> Convert to supported format*.
+
 ## Low quality / blurry playback
 
-Some formats or codecs are not natively supported, so they will play back with a lower quality. You may convert these files to a supported codec from the File menu, see [#88](https://github.com/mifi/lossless-cut/issues/88).
+Some formats or codecs are not natively supported by LosslessCut's built in player, and LosslessCut will automatically use FFmpeg-assisted software decoding to playback in a lower quality. For better playback you may convert these files to a different format from the menu: *File -> Convert to supported format*. Note that this will not affect the output from LosslessCut, it is only used for playback, see [#88](https://github.com/mifi/lossless-cut/issues/88).
 
 ## MPEG TS / MTS
 
@@ -152,7 +147,7 @@ When exporting, LosslessCut may be unable to process certain proprietary tracks.
 
 ## Multiple LosslessCut instances
 
-By default, only a single running instance of LosslessCut is allowed. If you start a new LosslessCut instance from the command line, it will instead pass the list of files onto the already running instance. You can override this behavior inside settings Note that this is **(experimental)**, because Electron doesn't seem to support this. [More info](https://github.com/electron/electron/issues/2493) [#1641](https://github.com/mifi/lossless-cut/issues/1641)
+By default, only a single running instance of LosslessCut is allowed. If you start a new LosslessCut instance from the command line, it will pass the list of files to the already running instance. You can override this behavior inside settings. Note that running multiple instances is **experimental**, because Electron doesn't seem to support this. [More info](https://github.com/electron/electron/issues/2493) [#1641](https://github.com/mifi/lossless-cut/issues/1641)
 
 ## Rotation and merging
 

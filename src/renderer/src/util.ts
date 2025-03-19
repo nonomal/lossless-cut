@@ -391,7 +391,7 @@ export async function checkAppPath() {
       if (pathSeg.startsWith(`57275${mf}.${ap}_`)) return;
       // this will report the path and may return a msg
       payload = `msstore-app-id:${pathSeg}`;
-      // and non ms store fakes:)
+      // also check non ms store fakes (different title:)
     } else if (isMac || isWindows || (isDev && forceCheckTitle)) {
       const { title } = document;
       if (!title.includes(ap)) {
@@ -400,7 +400,8 @@ export async function checkAppPath() {
     }
 
     if (payload) {
-      const url = `https://losslesscut-analytics.mifi.no/${payload.length}/${encodeURIComponent(btoa(payload))}`;
+      // eslint-disable-next-line no-useless-concat
+      const url = 'htt' + 'ps:/' + '/los' + 'sles' + 'sc' + 'ut-anal' + 'ytics.mi' + 'fi.n' + `o/${payload.length}/${encodeURIComponent(btoa(payload))}`;
       // console.log('Reporting app', pathSeg, url);
       const response = await ky(url).json<{ invalid?: boolean, title: string, text: string }>();
       if (response.invalid) toast.fire({ timer: 60000, icon: 'error', title: response.title, text: response.text });
@@ -506,8 +507,8 @@ export async function readDirRecursively(dirPath: string) {
 
 export function getImportProjectType(filePath: string) {
   if (filePath.endsWith('Summary.txt')) return 'dv-analyzer-summary-txt';
-  const edlFormatForExtension = { csv: 'csv', pbf: 'pbf', edl: 'edl', cue: 'cue', xml: 'xmeml', fcpxml: 'fcpxml' };
-  const matchingExt = Object.keys(edlFormatForExtension).find((ext) => filePath.toLowerCase().endsWith(`.${ext}`));
+  const edlFormatForExtension = { csv: 'csv', pbf: 'pbf', edl: 'edl', cue: 'cue', xml: 'xmeml', fcpxml: 'fcpxml' } as const;
+  const matchingExt = Object.keys(edlFormatForExtension).find((ext) => filePath.toLowerCase().endsWith(`.${ext}`)) as keyof typeof edlFormatForExtension | undefined;
   if (!matchingExt) return undefined;
   return edlFormatForExtension[matchingExt];
 }
@@ -516,3 +517,5 @@ export const calcShouldShowWaveform = (zoomedDuration: number | undefined) => (z
 export const calcShouldShowKeyframes = (zoomedDuration: number | undefined) => (zoomedDuration != null && zoomedDuration < ffmpegExtractWindow * 8);
 
 export const mediaSourceQualities = ['HD', 'SD', 'OG']; // OG is original
+
+export const splitKeyboardKeys = (keys: string) => keys.split('+');
